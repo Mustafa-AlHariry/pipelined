@@ -553,13 +553,8 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 				Comp_Mux_1 <= 2'b00;
 				Comp_Mux_2 <= 2'b01;
 			end
-			else
-			begin
-				Comp_Mux_1 <= 2'b00;
-				Comp_Mux_2 <= 2'b00;
-			end
-		end
-		else if( Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) 
+			
+			else if( Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) 
 		begin
 			if ( Mem_WB_DestReg ==  IF_ID_Rs && Mem_WB_DestReg ==  IF_ID_Rt ) //beq s1,s1,L1
 			begin
@@ -582,6 +577,55 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 				Comp_Mux_2 <= 2'b00;
 			end			
 		end
+		else
+			begin
+				Comp_Mux_1 <= 2'b00;
+				Comp_Mux_2 <= 2'b00;
+			end	
+		end
+		else if( Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) 
+		begin
+			if ( Mem_WB_DestReg ==  IF_ID_Rs && Mem_WB_DestReg ==  IF_ID_Rt ) //beq s1,s1,L1
+			begin
+				Comp_Mux_1 <= 2'b10;
+				Comp_Mux_2 <= 2'b10;
+			end
+			else if( Mem_WB_DestReg ==  IF_ID_Rs )
+			begin
+				Comp_Mux_1 <= 2'b10;
+				Comp_Mux_2 <= 2'b00;
+			end
+			else if( Mem_WB_DestReg ==  IF_ID_Rt)
+			begin
+				Comp_Mux_1 <= 2'b00;
+				Comp_Mux_2 <= 2'b10;
+			end
+			else if ( Ex_Mem_DestReg ==  IF_ID_Rs && Ex_Mem_DestReg ==  IF_ID_Rt) //beq s1,s1,L1
+			begin
+				Comp_Mux_1 <= 2'b01;
+				Comp_Mux_2 <= 2'b01;
+			end
+			else if( Ex_Mem_DestReg ==  IF_ID_Rs )
+			begin
+				Comp_Mux_1 <= 2'b01;
+				Comp_Mux_2 <= 2'b00;
+			end
+			else if( Ex_Mem_DestReg ==  IF_ID_Rt)
+			begin
+				Comp_Mux_1 <= 2'b00;
+				Comp_Mux_2 <= 2'b01;
+			end
+			else
+			begin
+				Comp_Mux_1 <= 2'b00;
+				Comp_Mux_2 <= 2'b00;
+			end			
+		end
+		else
+			begin
+				Comp_Mux_1 <= 2'b00;
+				Comp_Mux_2 <= 2'b00;
+			end	
 	end
 endmodule
 module ID_EX_reg ( Reg_Write , Mem_to_Reg , Mem_Write , Mem_Read , ALU_Src , Reg_Dst , ALU_Op , Read_Data1_Out ,  Read_Data2_Out , shift_amount_out , Sign_Ext_out ,rs , rt , rd , func_field ,
@@ -831,13 +875,19 @@ module Forwarding_Unit_EX(ID_EX_rs,ID_EX_rt,EX_MEM_register_destination,MEM_WB_r
 	output reg [1:0] forwardB;  //10 choose EXE out ,01 choose MEM;
 	always@(*)
 	begin
-
 		if((EX_MEM_regwrite)&&(EX_MEM_register_destination!=0))
 		begin
 			if(EX_MEM_register_destination==ID_EX_rs)
 				forwardA <= 2'b10;//3amltha el awal bas 3shan 3ayezha priority 3lshan lw feh inst 2 wra ba3d beyktbo f nafs register ya5od agdad wa7da
 			if(EX_MEM_register_destination==ID_EX_rt)
 				forwardB <= 2'b10;
+			else if((MEM_WB_regwrite)&&(MEM_WB_register_destination!=0) && (!(EX_MEM_register_destination==ID_EX_rs)))
+			begin
+				if(MEM_WB_register_destination==ID_EX_rs)
+					forwardA <= 2'b01;
+				if(MEM_WB_register_destination==ID_EX_rt)  // 5aletha if 3shan momken el etnin yeb2a beytketb fehom 3ady
+					forwardB <= 2'b01;
+			end
 		end
 		else if((MEM_WB_regwrite)&&(MEM_WB_register_destination!=0))
 		begin
@@ -845,6 +895,13 @@ module Forwarding_Unit_EX(ID_EX_rs,ID_EX_rt,EX_MEM_register_destination,MEM_WB_r
 				forwardA <= 2'b01;
 			if(MEM_WB_register_destination==ID_EX_rt)  // 5aletha if 3shan momken el etnin yeb2a beytketb fehom 3ady
 				forwardB <= 2'b01;
+			else if((EX_MEM_regwrite)&&(EX_MEM_register_destination!=0)&& (!(MEM_WB_register_destination==ID_EX_rs))
+		begin
+			if(EX_MEM_register_destination==ID_EX_rs)
+				forwardA <= 2'b10;//3amltha el awal bas 3shan 3ayezha priority 3lshan lw feh inst 2 wra ba3d beyktbo f nafs register ya5od agdad wa7da
+			if(EX_MEM_register_destination==ID_EX_rt)
+				forwardB <= 2'b10;
+end
 		end
 		else //if no forwarding send to alu the normal rs and rd without forwarding
 		begin
@@ -1179,7 +1236,7 @@ MUX_32_1 jr_mux(jr_mux_output, jump_mux_output, Read_Data_1, JR_Signal);
 
 initial
 begin
-$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h \n id_ex_reg_write: %h , id_ex_memtoreg: %h , id_ex_mem_write: %h , id_ex_mem_read: %h , id_ex_alu_src: %h , id_ex_regdst: %h , id_ex_aluop: %h , id_ex_read_data1: %h ,  id_ex_read_data2: %h , shift_amount: %h , id_ex_Sign_Ext_Output: %h ,\nid_ex_rs: %h , id_ex_rt: %h , id_ex_rd: %h ,id_ex_func_field: %h,hazard_mux_output: %h , Read_Data_1: %h , Read_Data_2: %h , Sign_Ext_Output: %h ,inst_IF_Out: %h  \n regdst_mux_out: %h,id_ex_rd: %h,id_ex_rt: %h,id_ex_regdst: %h \n alu_upper_mux_out: %h,id_ex_read_data1: %h, mem_wb_mux_output: %h,ex_mem_alu_result: %h,upper_mux_forward: %h\n ***************************************",Clock,pcOut,pcIn,instruction,id_ex_reg_write , id_ex_memtoreg , id_ex_mem_write , id_ex_mem_read , id_ex_alu_src , id_ex_regdst , id_ex_aluop , id_ex_read_data1 ,  id_ex_read_data2 , shift_amount , id_ex_Sign_Ext_Output ,id_ex_rs , id_ex_rt , id_ex_rd ,id_ex_func_field, hazard_mux_output , Read_Data_1 , Read_Data_2 , Sign_Ext_Output ,inst_IF_Out  ,regdst_mux_out,id_ex_rd,id_ex_rt,id_ex_regdst,alu_upper_mux_out,id_ex_read_data1,mem_wb_mux_output,ex_mem_alu_result,upper_mux_forward);
+$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h \n id_ex_rs: %h,id_ex_rt: %h,ex_mem_dstreg: %h,mem_wb_dstreg: %h, \n id_ex_reg_write: %h , id_ex_memtoreg: %h , id_ex_mem_write: %h , id_ex_mem_read: %h , id_ex_alu_src: %h , id_ex_regdst: %h , id_ex_aluop: %h , id_ex_read_data1: %h ,  id_ex_read_data2: %h , shift_amount: %h , id_ex_Sign_Ext_Output: %h ,\nid_ex_rs: %h , id_ex_rt: %h , id_ex_rd: %h ,id_ex_func_field: %h,hazard_mux_output: %h , Read_Data_1: %h , Read_Data_2: %h , Sign_Ext_Output: %h ,inst_IF_Out: %h  \n regdst_mux_out: %h,id_ex_rd: %h,id_ex_rt: %h,id_ex_regdst: %h \n alu_upper_mux_out: %h,id_ex_read_data1: %h, mem_wb_mux_output: %h,ex_mem_alu_result: %h,upper_mux_forward: %h\n ***************************************",Clock,pcOut,pcIn,instruction,id_ex_rs,id_ex_rt,ex_mem_dstreg,mem_wb_dstreg,id_ex_reg_write , id_ex_memtoreg , id_ex_mem_write , id_ex_mem_read , id_ex_alu_src , id_ex_regdst , id_ex_aluop , id_ex_read_data1 ,  id_ex_read_data2 , shift_amount , id_ex_Sign_Ext_Output ,id_ex_rs , id_ex_rt , id_ex_rd ,id_ex_func_field, hazard_mux_output , Read_Data_1 , Read_Data_2 , Sign_Ext_Output ,inst_IF_Out  ,regdst_mux_out,id_ex_rd,id_ex_rt,id_ex_regdst,alu_upper_mux_out,id_ex_read_data1,mem_wb_mux_output,ex_mem_alu_result,upper_mux_forward);
 end
 endmodule
 
