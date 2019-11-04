@@ -816,7 +816,7 @@ module ALU_CONTROL(alu_ctrl, alu_op, inst_5_0);//jr signal
 		end
 	end
 endmodule
-module Forwarding_Unit_EX(clk,ID_EX_rs,ID_EX_rt,EX_MEM_register_destination,MEM_WB_register_destination,EX_MEM_memtoreg,MEM_WB_memtoreg,EX_MEM_regwrite,MEM_WB_regwrite,forwardA,forwardB);
+module Forwarding_Unit_EX(ID_EX_rs,ID_EX_rt,EX_MEM_register_destination,MEM_WB_register_destination,EX_MEM_memtoreg,MEM_WB_memtoreg,EX_MEM_regwrite,MEM_WB_regwrite,forwardA,forwardB);
 
 	input [4:0] EX_MEM_register_destination; //the register to be written at of instruction in EX/mem reg pipeline;
 	input [4:0] MEM_WB_register_destination;//_______________________________________________MEM/WB reg pipeline
@@ -826,10 +826,10 @@ module Forwarding_Unit_EX(clk,ID_EX_rs,ID_EX_rt,EX_MEM_register_destination,MEM_
 	input    MEM_WB_memtoreg;
 	input    EX_MEM_regwrite;
 	input    MEM_WB_regwrite;
-	input    clk;
+	
 	output reg [1:0] forwardA;  //to control ALU input with output from EXE or MEM; 
 	output reg [1:0] forwardB;  //10 choose EXE out ,01 choose MEM;
-	always@(posedge clk)
+	always@(*)
 	begin
 
 		if((EX_MEM_regwrite)&&(EX_MEM_register_destination!=0))
@@ -1143,7 +1143,7 @@ ALU alu(Alu_Result,shift_amount, alu_upper_mux_out, alu_src_mux_Output, alu_ctrl
 
 ALU_CONTROL alu_control ( alu_ctrl, id_ex_aluop, id_ex_func_field);
 
-Forwarding_Unit_EX ex_forward_unit(Clock,id_ex_rs,id_ex_rt,ex_mem_dstreg,mem_wb_dstreg,ex_mem_memtoreg,mem_wb_memtoreg,ex_mem_reg_write,mem_wb_reg_write,upper_mux_forward,lower_mux_forward);
+Forwarding_Unit_EX ex_forward_unit(id_ex_rs,id_ex_rt,ex_mem_dstreg,mem_wb_dstreg,ex_mem_memtoreg,mem_wb_memtoreg,ex_mem_reg_write,mem_wb_reg_write,upper_mux_forward,lower_mux_forward);
 
 MUX_5_1 reg_dst_mux(regdst_mux_out,id_ex_rt,id_ex_rd,id_ex_regdst);
 
@@ -1179,7 +1179,7 @@ MUX_32_1 jr_mux(jr_mux_output, jump_mux_output, Read_Data_1, JR_Signal);
 
 initial
 begin
-$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h \n id_ex_reg_write: %h , id_ex_memtoreg: %h , id_ex_mem_write: %h , id_ex_mem_read: %h , id_ex_alu_src: %h , id_ex_regdst: %h , id_ex_aluop: %h , id_ex_read_data1: %h ,  id_ex_read_data2: %h , shift_amount: %h , id_ex_Sign_Ext_Output: %h ,\nid_ex_rs: %h , id_ex_rt: %h , id_ex_rd: %h ,id_ex_func_field: %h,hazard_mux_output: %h , Read_Data_1: %h , Read_Data_2: %h , Sign_Ext_Output: %h ,inst_IF_Out: %h  \n regdst_mux_out: %h,id_ex_rd: %h,id_ex_rt: %h,id_ex_regdst: %h \n mem_wb_dstreg: %h, mem_wb_mux_output: %h , mem_wb_alu_reslut: %h, mem_wb_read_data: %h\n ***************************************",Clock,pcOut,pcIn,instruction,id_ex_reg_write , id_ex_memtoreg , id_ex_mem_write , id_ex_mem_read , id_ex_alu_src , id_ex_regdst , id_ex_aluop , id_ex_read_data1 ,  id_ex_read_data2 , shift_amount , id_ex_Sign_Ext_Output ,id_ex_rs , id_ex_rt , id_ex_rd ,id_ex_func_field, hazard_mux_output , Read_Data_1 , Read_Data_2 , Sign_Ext_Output ,inst_IF_Out  ,regdst_mux_out,id_ex_rd,id_ex_rt,id_ex_regdst,mem_wb_dstreg,mem_wb_mux_output , mem_wb_alu_reslut , mem_wb_read_data);
+$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h \n id_ex_reg_write: %h , id_ex_memtoreg: %h , id_ex_mem_write: %h , id_ex_mem_read: %h , id_ex_alu_src: %h , id_ex_regdst: %h , id_ex_aluop: %h , id_ex_read_data1: %h ,  id_ex_read_data2: %h , shift_amount: %h , id_ex_Sign_Ext_Output: %h ,\nid_ex_rs: %h , id_ex_rt: %h , id_ex_rd: %h ,id_ex_func_field: %h,hazard_mux_output: %h , Read_Data_1: %h , Read_Data_2: %h , Sign_Ext_Output: %h ,inst_IF_Out: %h  \n regdst_mux_out: %h,id_ex_rd: %h,id_ex_rt: %h,id_ex_regdst: %h \n alu_upper_mux_out: %h,id_ex_read_data1: %h, mem_wb_mux_output: %h,ex_mem_alu_result: %h,upper_mux_forward: %h\n ***************************************",Clock,pcOut,pcIn,instruction,id_ex_reg_write , id_ex_memtoreg , id_ex_mem_write , id_ex_mem_read , id_ex_alu_src , id_ex_regdst , id_ex_aluop , id_ex_read_data1 ,  id_ex_read_data2 , shift_amount , id_ex_Sign_Ext_Output ,id_ex_rs , id_ex_rt , id_ex_rd ,id_ex_func_field, hazard_mux_output , Read_Data_1 , Read_Data_2 , Sign_Ext_Output ,inst_IF_Out  ,regdst_mux_out,id_ex_rd,id_ex_rt,id_ex_regdst,alu_upper_mux_out,id_ex_read_data1,mem_wb_mux_output,ex_mem_alu_result,upper_mux_forward);
 end
 endmodule
 
