@@ -895,13 +895,13 @@ module Forwarding_Unit_EX(ID_EX_rs,ID_EX_rt,EX_MEM_register_destination,MEM_WB_r
 				forwardA <= 2'b01;
 			if(MEM_WB_register_destination==ID_EX_rt)  // 5aletha if 3shan momken el etnin yeb2a beytketb fehom 3ady
 				forwardB <= 2'b01;
-			else if((EX_MEM_regwrite)&&(EX_MEM_register_destination!=0)&& (!(MEM_WB_register_destination==ID_EX_rs))
-		begin
-			if(EX_MEM_register_destination==ID_EX_rs)
-				forwardA <= 2'b10;//3amltha el awal bas 3shan 3ayezha priority 3lshan lw feh inst 2 wra ba3d beyktbo f nafs register ya5od agdad wa7da
-			if(EX_MEM_register_destination==ID_EX_rt)
-				forwardB <= 2'b10;
-end
+			else if((EX_MEM_regwrite)&&(EX_MEM_register_destination!=0)&& (!(MEM_WB_register_destination==ID_EX_rs)))
+			begin
+				if(EX_MEM_register_destination==ID_EX_rs)
+					forwardA <= 2'b10;//3amltha el awal bas 3shan 3ayezha priority 3lshan lw feh inst 2 wra ba3d beyktbo f nafs register ya5od agdad wa7da
+				if(EX_MEM_register_destination==ID_EX_rt)
+					forwardB <= 2'b10;
+			end
 		end
 		else //if no forwarding send to alu the normal rs and rd without forwarding
 		begin
