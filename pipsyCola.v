@@ -43,7 +43,7 @@ module PC( PC_plus , PC , clock , hold_pc );
 	begin
 		if(hold_pc == 0)//if no stall pass the pc+4;	
 		begin
-			PC_plus = PC;  //if hold =1 do nothing;
+			PC_plus <= PC;  //if hold =1 do nothing;
 		end
 	end
 endmodule
@@ -55,10 +55,10 @@ module PC_ADDER(PC_Adder_output,PC);
 		PC_Adder_output=PC+1;
 	end
 endmodule
-module INS_MEMORY(instruction, clk, pc);
+module INS_MEMORY(instruction, clk, pc,  hold_pc);
 	output reg[31:0] instruction;
 	input  wire[31:0] pc;
-	input  wire clk;
+	input  wire clk, hold_pc;
 	reg[31:0] Imem[0:8191]; // 32KB memory ehich is 8192 register each one is 32bit 
 	initial 
 	begin 
@@ -66,8 +66,8 @@ module INS_MEMORY(instruction, clk, pc);
 	end
 	always @(posedge clk )
 	begin 
-		
-		instruction <= Imem[pc]; 
+		if(!hold_pc)
+			instruction <= Imem[pc]; 
 	end
 endmodule
 module IF_ID_Reg(instrOut , PCplus4Out , instrIn , PCplus4 , clk , hold , IF_Flush );
@@ -78,7 +78,7 @@ module IF_ID_Reg(instrOut , PCplus4Out , instrIn , PCplus4 , clk , hold , IF_Flu
 
 	always @(posedge clk)
 	begin
-     		if ( hold ==1'b0 && IF_Flush==1'b1) 
+		if ( hold ==1'b0 && IF_Flush==1'b1) 
         	begin
           		PCplus4Out <= 32'b0 ;
 			instrOut   <= 32'b0 ;
@@ -130,10 +130,12 @@ module Comparator( Zero , read_data1 , read_data2 );
 
 input [31:0]  read_data1 ;
 input [31:0]  read_data2 ;
-output Zero ;
+output reg Zero ;
 
-assign Zero = ( read_data1 == read_data2 ) ? 1'b1 : 1'b0;
-
+always @(*)
+begin
+Zero <= ( read_data1 == read_data2 ) ? 1'b1 : 1'b0;
+end
 endmodule
 module SIGN_EXTEND(Sign_Ext_Output, Ori, Inst_15_0);
 	input wire[15:0] Inst_15_0;
@@ -160,8 +162,7 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
         input  wire         ID_ExMemRead , Branch_And_Output ;
  	
 	reg flag;
-	parameter beqOPcode=6'b000100;
-	parameter bneOPcode=6'b000101;
+
 	initial
 	begin
 		holdPC <= 0;
@@ -171,21 +172,24 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
 		flag <= 0;
 	end
 
-	always@(ID_ExMemRead or ID_Ex_RegDst or IF_ID_Instr )
+	always@(*)
 	begin
-		if ( ( IF_ID_Instr [31:26] != beqOPcode || IF_ID_Instr [31:26] !=  bneOPcode )&& ID_ExMemRead && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:15]) )  // lw + ay 7aga 8ir beq -> stall
+		holdPC <=0;       
+		holdIF_ID<=0;
+              	muxSelector<=0;
+		if ( ( IF_ID_Instr [31:26] != 6'b000100 || IF_ID_Instr [31:26] != 6'b000101  )&& ID_ExMemRead && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:16]) )  // lw + ay 7aga 8ir beq -> stall
 		begin
 			holdPC<=1;
              		holdIF_ID<=1;
               		muxSelector<=1;
         	end
-      		else if( ( IF_ID_Instr [31:26] == beqOPcode || IF_ID_Instr [31:26] ==  bneOPcode ) && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:15]) ) // ay 7aga 8ir lw + beq -> 1 stall
+      		else if( ( IF_ID_Instr [31:26] == 6'b000100 || IF_ID_Instr [31:26] ==  6'b000101 ) && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:16]) ) // ay 7aga 8ir lw + beq -> 1 stall
         	begin
 			holdPC<=1;
              		holdIF_ID<=1;
               		muxSelector<=1;
         	end
-		else if(( IF_ID_Instr [31:26] == beqOPcode || IF_ID_Instr [31:26] ==  bneOPcode ) && ID_ExMemRead && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:15]) )//stalling twice //first stall
+		else if(( IF_ID_Instr [31:26] == 6'b000100 || IF_ID_Instr [31:26] ==  6'b000101 ) && ID_ExMemRead && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:16]) )//stalling0 twice //first stall
         	begin                                                                                                                    		 //lw +beq
           		
 			holdPC<=1;
@@ -209,7 +213,7 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
        		end
 
 		/*========================= Set Flush When Found Branch ================*/
-		if( ( IF_ID_Instr [31:26] == beqOPcode || IF_ID_Instr [31:26] ==  bneOPcode ) &&  Branch_And_Output ) 
+		if( ( IF_ID_Instr [31:26] == 6'b000100 || IF_ID_Instr [31:26] ==  6'b000101 ) &&  Branch_And_Output ) 
 		begin
 			IF_ID_Flush <= 1'b1; //ha2ool lel instruction ely fel IF_ID ely 7aslha fetch w da5lt mesh fakrak yaaad //w nerza3ha ka7ka	
 		end  
@@ -523,7 +527,7 @@ module BR_ADDER(branchAdded, PC_Adder_output, Sign_Ext_Output);
 	end
 endmodule
 module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt , Ex_Mem_DestReg , Mem_WB_DestReg , Ex_Mem_Write , Mem_WB_Write );
-	
+	//done
 	output reg  [1:0] Comp_Mux_1 ,Comp_Mux_2 ;
 	input  wire [4:0] IF_ID_Rs , IF_ID_Rt , Ex_Mem_DestReg , Mem_WB_DestReg ;
 	input  wire       Ex_Mem_Write , Mem_WB_Write , Branch ;  
@@ -534,8 +538,11 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 		Comp_Mux_2 <= 2'b00;
 	end
 	
-	always @ ( IF_ID_Rs or IF_ID_Rt or Ex_Mem_DestReg or Mem_WB_DestReg or Ex_Mem_Write or Mem_WB_Write)
+	always @ (*)
 	begin
+		Comp_Mux_1 <= 2'b00;
+		Comp_Mux_2 <= 2'b00;
+
 		if(Ex_Mem_Write && Ex_Mem_DestReg!=0 && Branch)
 		begin
 			if ( Ex_Mem_DestReg ==  IF_ID_Rs && Ex_Mem_DestReg ==  IF_ID_Rt) //beq s1,s1,L1
@@ -543,93 +550,71 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 				Comp_Mux_1 <= 2'b01;
 				Comp_Mux_2 <= 2'b01;
 			end
-			else if( Ex_Mem_DestReg ==  IF_ID_Rs )
+			else if (( Ex_Mem_DestReg ==  IF_ID_Rt) && ( Mem_WB_DestReg ==  IF_ID_Rs ))
 			begin
-				Comp_Mux_1 <= 2'b01;
-				Comp_Mux_2 <= 2'b00;
-			end
-			else if( Ex_Mem_DestReg ==  IF_ID_Rt)
-			begin
-				Comp_Mux_1 <= 2'b00;
+				Comp_Mux_1 <= 2'b10;
 				Comp_Mux_2 <= 2'b01;
 			end
-			
+			else if (( Ex_Mem_DestReg ==  IF_ID_Rs) && ( Mem_WB_DestReg ==  IF_ID_Rt ))
+			begin
+				Comp_Mux_1 <= 2'b01;
+				Comp_Mux_2 <= 2'b10;
+			end
+			else if( Ex_Mem_DestReg ==  IF_ID_Rs )
+				Comp_Mux_1 <= 2'b01;
+			else if( Ex_Mem_DestReg ==  IF_ID_Rt)
+				Comp_Mux_2 <= 2'b01;
 			else if( Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) 
-		begin
-			if ( Mem_WB_DestReg ==  IF_ID_Rs && Mem_WB_DestReg ==  IF_ID_Rt ) //beq s1,s1,L1
+			begin
+			if ( (Mem_WB_DestReg ==  IF_ID_Rs) && (Mem_WB_DestReg ==  IF_ID_Rt) ) //beq s1,s1,L1
 			begin
 				Comp_Mux_1 <= 2'b10;
 				Comp_Mux_2 <= 2'b10;
 			end
 			else if( Mem_WB_DestReg ==  IF_ID_Rs )
-			begin
 				Comp_Mux_1 <= 2'b10;
-				Comp_Mux_2 <= 2'b00;
-			end
 			else if( Mem_WB_DestReg ==  IF_ID_Rt)
-			begin
-				Comp_Mux_1 <= 2'b00;
 				Comp_Mux_2 <= 2'b10;
 			end
-			else
-			begin
-				Comp_Mux_1 <= 2'b00;
-				Comp_Mux_2 <= 2'b00;
-			end			
-		end
-		else
-			begin
-				Comp_Mux_1 <= 2'b00;
-				Comp_Mux_2 <= 2'b00;
-			end	
-		end
+			end
 		else if( Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) 
 		begin
-			if ( Mem_WB_DestReg ==  IF_ID_Rs && Mem_WB_DestReg ==  IF_ID_Rt ) //beq s1,s1,L1
+			if ( (Mem_WB_DestReg ==  IF_ID_Rs) && (Mem_WB_DestReg ==  IF_ID_Rt) ) //beq s1,s1,L1
 			begin
 				Comp_Mux_1 <= 2'b10;
 				Comp_Mux_2 <= 2'b10;
+			end
+			else if (( Ex_Mem_DestReg ==  IF_ID_Rs) && ( Mem_WB_DestReg ==  IF_ID_Rt ))
+			begin
+				Comp_Mux_1 <= 2'b01;
+				Comp_Mux_2 <= 2'b10;
+			end
+			else if (( Ex_Mem_DestReg ==  IF_ID_Rt) && ( Mem_WB_DestReg ==  IF_ID_Rs ))
+			begin
+				Comp_Mux_1 <= 2'b10;
+				Comp_Mux_2 <= 2'b01;
 			end
 			else if( Mem_WB_DestReg ==  IF_ID_Rs )
-			begin
 				Comp_Mux_1 <= 2'b10;
-				Comp_Mux_2 <= 2'b00;
-			end
 			else if( Mem_WB_DestReg ==  IF_ID_Rt)
-			begin
-				Comp_Mux_1 <= 2'b00;
 				Comp_Mux_2 <= 2'b10;
-			end
-			else if ( Ex_Mem_DestReg ==  IF_ID_Rs && Ex_Mem_DestReg ==  IF_ID_Rt) //beq s1,s1,L1
+			else if(Ex_Mem_Write && Ex_Mem_DestReg!=0 && Branch)
 			begin
-				Comp_Mux_1 <= 2'b01;
-				Comp_Mux_2 <= 2'b01;
-			end
-			else if( Ex_Mem_DestReg ==  IF_ID_Rs )
-			begin
-				Comp_Mux_1 <= 2'b01;
-				Comp_Mux_2 <= 2'b00;
-			end
-			else if( Ex_Mem_DestReg ==  IF_ID_Rt)
-			begin
-				Comp_Mux_1 <= 2'b00;
-				Comp_Mux_2 <= 2'b01;
-			end
-			else
-			begin
-				Comp_Mux_1 <= 2'b00;
-				Comp_Mux_2 <= 2'b00;
-			end			
+				if ( (Ex_Mem_DestReg ==  IF_ID_Rs) && (Ex_Mem_DestReg ==  IF_ID_Rt)) //beq s1,s1,L1
+				begin
+					Comp_Mux_1 <= 2'b01;
+					Comp_Mux_2 <= 2'b01;
+				end
+				else if( Ex_Mem_DestReg ==  IF_ID_Rs )
+					Comp_Mux_1 <= 2'b01;
+				else if( Ex_Mem_DestReg ==  IF_ID_Rt)
+					Comp_Mux_2 <= 2'b01;
+			end		
 		end
-		else
-			begin
-				Comp_Mux_1 <= 2'b00;
-				Comp_Mux_2 <= 2'b00;
-			end	
-	end
+end
 endmodule
-module ID_EX_reg ( Reg_Write , Mem_to_Reg , Mem_Write , Mem_Read , ALU_Src , Reg_Dst , ALU_Op , Read_Data1_Out ,  Read_Data2_Out , shift_amount_out , Sign_Ext_out ,rs , rt , rd , func_field ,
-		control_signal,Read_Data1,Read_Data2,Sign_Ext,IF_Inst,clk); //control unit input 
+
+module ID_EX_reg ( Reg_Write , Mem_to_Reg , Mem_Write , Mem_Read , ALU_Src , Reg_Dst , ALU_Op , Read_Data1_Out ,  Read_Data2_Out , shift_amount_out , Sign_Ext_out ,rs , rt , rd , func_field ,control_signal,Read_Data1,Read_Data2,Sign_Ext,IF_Inst,clk); //control unit input 
   
   input wire [9:0] control_signal ;
   input wire [31:0] Read_Data1,Read_Data2 ,Sign_Ext,IF_Inst;
@@ -875,38 +860,76 @@ module Forwarding_Unit_EX(ID_EX_rs,ID_EX_rt,EX_MEM_register_destination,MEM_WB_r
 	output reg [1:0] forwardB;  //10 choose EXE out ,01 choose MEM;
 	always@(*)
 	begin
+		forwardA<=2'b00;
+		forwardB<=2'b00;
 		if((EX_MEM_regwrite)&&(EX_MEM_register_destination!=0))
 		begin
-			if(EX_MEM_register_destination==ID_EX_rs)
+			if((EX_MEM_register_destination==ID_EX_rs) && (EX_MEM_register_destination==ID_EX_rt))
+			begin
+				forwardA <= 2'b10;
+				forwardB <= 2'b10;
+			end
+			else if((EX_MEM_register_destination==ID_EX_rs) && (MEM_WB_register_destination==ID_EX_rt))
+			begin
+				forwardA <= 2'b10;
+				forwardB <= 2'b01;
+			end
+			else if((EX_MEM_register_destination==ID_EX_rt) &&(MEM_WB_register_destination==ID_EX_rs))
+			begin
+				forwardA <= 2'b01;
+				forwardB <= 2'b10;
+			end
+			else if(EX_MEM_register_destination==ID_EX_rs)
 				forwardA <= 2'b10;//3amltha el awal bas 3shan 3ayezha priority 3lshan lw feh inst 2 wra ba3d beyktbo f nafs register ya5od agdad wa7da
-			if(EX_MEM_register_destination==ID_EX_rt)
+			else if(EX_MEM_register_destination==ID_EX_rt)
 				forwardB <= 2'b10;
 			else if((MEM_WB_regwrite)&&(MEM_WB_register_destination!=0) && (!(EX_MEM_register_destination==ID_EX_rs)))
 			begin
-				if(MEM_WB_register_destination==ID_EX_rs)
+				if((MEM_WB_register_destination==ID_EX_rs) && (MEM_WB_register_destination==ID_EX_rt))
+				begin
 					forwardA <= 2'b01;
-				if(MEM_WB_register_destination==ID_EX_rt)  // 5aletha if 3shan momken el etnin yeb2a beytketb fehom 3ady
 					forwardB <= 2'b01;
+				end	
+				else if(MEM_WB_register_destination==ID_EX_rs)
+					forwardA <= 2'b01;
+				else if(MEM_WB_register_destination==ID_EX_rt)  // 5aletha if 3shan momken el etnin yeb2a beytketb fehom 3ady
+					forwardB <= 2'b01;
+				
 			end
 		end
 		else if((MEM_WB_regwrite)&&(MEM_WB_register_destination!=0))
 		begin
-			if(MEM_WB_register_destination==ID_EX_rs)
+			if((MEM_WB_register_destination==ID_EX_rs) && (MEM_WB_register_destination==ID_EX_rt))
+			begin
 				forwardA <= 2'b01;
-			if(MEM_WB_register_destination==ID_EX_rt)  // 5aletha if 3shan momken el etnin yeb2a beytketb fehom 3ady
+				forwardB <= 2'b01;
+			end
+			else if((EX_MEM_register_destination==ID_EX_rs) && (MEM_WB_register_destination==ID_EX_rt))
+			begin
+				forwardA <= 2'b10;
+				forwardB <= 2'b01;
+			end
+			else if((EX_MEM_register_destination==ID_EX_rt) &&(MEM_WB_register_destination==ID_EX_rs))
+			begin
+				forwardA <= 2'b01;
+				forwardB <= 2'b10;
+			end
+			else if(MEM_WB_register_destination==ID_EX_rs)
+				forwardA <= 2'b01;
+			else if(MEM_WB_register_destination==ID_EX_rt)  // 5aletha if 3shan momken el etnin yeb2a beytketb fehom 3ady
 				forwardB <= 2'b01;
 			else if((EX_MEM_regwrite)&&(EX_MEM_register_destination!=0)&& (!(MEM_WB_register_destination==ID_EX_rs)))
 			begin
-				if(EX_MEM_register_destination==ID_EX_rs)
+				if((EX_MEM_register_destination==ID_EX_rs) && (EX_MEM_register_destination==ID_EX_rt))
+				begin
+					forwardA <= 2'b10;
+					forwardB <= 2'b10;
+				end
+				else if(EX_MEM_register_destination==ID_EX_rs)
 					forwardA <= 2'b10;//3amltha el awal bas 3shan 3ayezha priority 3lshan lw feh inst 2 wra ba3d beyktbo f nafs register ya5od agdad wa7da
-				if(EX_MEM_register_destination==ID_EX_rt)
+				else if(EX_MEM_register_destination==ID_EX_rt)
 					forwardB <= 2'b10;
 			end
-		end
-		else //if no forwarding send to alu the normal rs and rd without forwarding
-		begin
-			forwardA<=2'b00;
-			forwardB<=2'b00;
 		end
 end
 endmodule
@@ -1052,7 +1075,8 @@ module Hazard_MUX_10_1(output_mux,Reg_Write,Mem_to_Reg,Mem_Write,Mem_Read,ALU_Sr
 	begin 
 		if (selector == 1)
 		begin
-			output_mux <= 10'd0 ;
+			output_mux <= 10'b0000010000;
+
 		end
 		else
 		begin
@@ -1133,7 +1157,7 @@ PC_ADDER pc_adder( pcIn , pcOut );
 /***********************/
 
 /******INSTRUCTION MEMORY**********/
-INS_MEMORY ins_memory(instruction, Clock, pcOut);
+INS_MEMORY ins_memory(instruction, Clock, pcOut, hold_pc);
 /***********************************/
 
 /*********BEQ AND BNE MUX***********/
@@ -1211,8 +1235,7 @@ EX_MemReg ex_mem_reg (Clock,id_ex_reg_write, id_ex_memtoreg,id_ex_mem_write, id_
 
 DATA_MEMORY data_memory( Read_Data , ex_mem_mem_write , ex_mem_mem_read , ex_mem_alu_result[12:0] , ex_mem_lower_mux_out , Clock );
 
-Mem_WbReg mem_wb_reg(    ex_mem_reg_write , ex_mem_memtoreg , ex_mem_alu_result ,  Clock , Read_Data  , ex_mem_dstreg ,
-			 mem_wb_reg_write , mem_wb_memtoreg , mem_wb_read_data , mem_wb_alu_reslut , mem_wb_dstreg );
+Mem_WbReg mem_wb_reg(    ex_mem_reg_write , ex_mem_memtoreg , ex_mem_alu_result ,  Clock , Read_Data  , ex_mem_dstreg ,mem_wb_reg_write , mem_wb_memtoreg , mem_wb_read_data , mem_wb_alu_reslut , mem_wb_dstreg );
 MUX_32_1 mem_wb_mux(mem_wb_mux_output , mem_wb_alu_reslut , mem_wb_read_data , mem_wb_memtoreg );
 
 /*******************************WIRES*******************************/
@@ -1236,7 +1259,7 @@ MUX_32_1 jr_mux(jr_mux_output, jump_mux_output, Read_Data_1, JR_Signal);
 
 initial
 begin
-$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h \n id_ex_rs: %h,id_ex_rt: %h,ex_mem_dstreg: %h,mem_wb_dstreg: %h, \n id_ex_reg_write: %h , id_ex_memtoreg: %h , id_ex_mem_write: %h , id_ex_mem_read: %h , id_ex_alu_src: %h , id_ex_regdst: %h , id_ex_aluop: %h , id_ex_read_data1: %h ,  id_ex_read_data2: %h , shift_amount: %h , id_ex_Sign_Ext_Output: %h ,\nid_ex_rs: %h , id_ex_rt: %h , id_ex_rd: %h ,id_ex_func_field: %h,hazard_mux_output: %h , Read_Data_1: %h , Read_Data_2: %h , Sign_Ext_Output: %h ,inst_IF_Out: %h  \n regdst_mux_out: %h,id_ex_rd: %h,id_ex_rt: %h,id_ex_regdst: %h \n alu_upper_mux_out: %h,id_ex_read_data1: %h, mem_wb_mux_output: %h,ex_mem_alu_result: %h,upper_mux_forward: %h\n ***************************************",Clock,pcOut,pcIn,instruction,id_ex_rs,id_ex_rt,ex_mem_dstreg,mem_wb_dstreg,id_ex_reg_write , id_ex_memtoreg , id_ex_mem_write , id_ex_mem_read , id_ex_alu_src , id_ex_regdst , id_ex_aluop , id_ex_read_data1 ,  id_ex_read_data2 , shift_amount , id_ex_Sign_Ext_Output ,id_ex_rs , id_ex_rt , id_ex_rd ,id_ex_func_field, hazard_mux_output , Read_Data_1 , Read_Data_2 , Sign_Ext_Output ,inst_IF_Out  ,regdst_mux_out,id_ex_rd,id_ex_rt,id_ex_regdst,alu_upper_mux_out,id_ex_read_data1,mem_wb_mux_output,ex_mem_alu_result,upper_mux_forward);
+$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h \n up: %h, low: %h regdst_mux_out: %h , rs: %h , rt:%h	\n branch_or_output: %h, branch_adder_output: %h\n ex_mem_alu_result: %h ,mem_wb_mux_output: %h read_data1: %h , read_data2: %h Zero:%h \n ID_ExMemRead: %h,  ID_Ex_RegDst: %h , IF_ID_Instr: %h , holdPC: %h , holdIF_ID: %h , IF_ID_Flush: %h , Branch_And_Output: %h ***************************************",Clock,pcOut,pcIn,instruction,Comp_Mux_1,Comp_Mux_2,regdst_mux_out,inst_IF_Out[25:21], inst_IF_Out[20:16], branch_or_output, branch_adder_output ,ex_mem_alu_result,mem_wb_mux_output,comp_upper_mux_out , comp_lower_mux_out,Zero,id_ex_mem_read ,  regdst_mux_out , inst_IF_Out , hold_pc , hold_if_id_reg , IF_Flush , branch_or_output );
 end
 endmodule
 
