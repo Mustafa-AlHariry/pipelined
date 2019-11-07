@@ -155,14 +155,14 @@ module SIGN_EXTEND(Sign_Ext_Output, Ori, Inst_15_0);
 			Sign_Ext_Output <=32'd0;
 	end
 endmodule
-module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC , holdIF_ID , IF_ID_Flush , Branch_And_Output ,muxSelector );
+module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC , holdIF_ID , IF_ID_Flush , Branch_And_Output ,muxSelector, flagout, flagin );
   
 	output reg          holdPC , holdIF_ID , muxSelector , IF_ID_Flush ;
 	input  wire   [4:0] ID_Ex_RegDst ;
  	input  wire  [31:0] IF_ID_Instr ;
         input  wire         ID_ExMemRead , Branch_And_Output ;
- 	
-	reg flag;
+ 	input wire  flagin;
+	output reg flagout;
 
 	initial
 	begin
@@ -170,7 +170,7 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
 		holdIF_ID <= 0;
 		muxSelector <= 0;
 		IF_ID_Flush <=0;
-		flag <= 0;
+		flagout <= 0;
 	end
 
 	always@(*)
@@ -178,6 +178,14 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
 		holdPC <=0;       
 		holdIF_ID<=0;
               	muxSelector<=0;
+		if(flagin == 1)
+		begin
+			holdPC<=1;
+             		holdIF_ID<=1;
+              		muxSelector<=1;
+			flagout<=0;
+		end
+		else
 		if ( ( IF_ID_Instr [31:26] != 6'b000100 || IF_ID_Instr [31:26] != 6'b000101  )&& ID_ExMemRead && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:16]) )  // lw + ay 7aga 8ir beq -> stall
 		begin
 			holdPC<=1;
@@ -196,22 +204,11 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
 			holdPC<=1;
              		holdIF_ID<=1;
               		muxSelector<=1;
-			flag<=1;
+			flagout<=1;
         	end
-          	else if(flag==1 )//second stall  
-            	begin
-        		
-			holdPC<=1;
-             		holdIF_ID<=1;
-              		muxSelector<=1;
-			flag<=0;
-        	end                   
-           	else
-        	begin
-          		holdPC<=0;
-          		holdIF_ID<=0;
-          		muxSelector<=0; 
-       		end
+			
+        	end                 
+         
 
 		/*========================= Set Flush When Found Branch ================*/
 		if( ( IF_ID_Instr [31:26] == 6'b000100 || IF_ID_Instr [31:26] ==  6'b000101 ) &&  Branch_And_Output ) 
@@ -527,11 +524,11 @@ module BR_ADDER(branchAdded, PC_Adder_output, Sign_Ext_Output);
 		branchAdded <= PC_Adder_output + Sign_Ext_Output;
 	end
 endmodule
-module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt , Ex_Mem_DestReg , Mem_WB_DestReg , Ex_Mem_Write , Mem_WB_Write );
+module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch , Branch_Not_Equal, IF_ID_Rs , IF_ID_Rt , Ex_Mem_DestReg , Mem_WB_DestReg , Ex_Mem_Write , Mem_WB_Write );
 	//done
 	output reg  [1:0] Comp_Mux_1 ,Comp_Mux_2 ;
 	input  wire [4:0] IF_ID_Rs , IF_ID_Rt , Ex_Mem_DestReg , Mem_WB_DestReg ;
-	input  wire       Ex_Mem_Write , Mem_WB_Write , Branch ;  
+	input  wire       Ex_Mem_Write , Mem_WB_Write , Branch, Branch_Not_Equal ;  
 	
 	initial 
 	begin
@@ -544,7 +541,7 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 		Comp_Mux_1 <= 2'b00;
 		Comp_Mux_2 <= 2'b00;
 
-		if(Ex_Mem_Write && Ex_Mem_DestReg!=0 && Branch)
+		if((Ex_Mem_Write && Ex_Mem_DestReg!=0 && Branch) || (Ex_Mem_Write && Ex_Mem_DestReg!=0 &&Branch_Not_Equal))
 		begin
 			if ( Ex_Mem_DestReg ==  IF_ID_Rs && Ex_Mem_DestReg ==  IF_ID_Rt) //beq s1,s1,L1
 			begin
@@ -565,7 +562,7 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 				Comp_Mux_1 <= 2'b01;
 			else if( Ex_Mem_DestReg ==  IF_ID_Rt)
 				Comp_Mux_2 <= 2'b01;
-			else if( Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) 
+			else if ( (Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) || (Mem_WB_Write && Mem_WB_DestReg!=0 &&Branch_Not_Equal)) 
 			begin
 			if ( (Mem_WB_DestReg ==  IF_ID_Rs) && (Mem_WB_DestReg ==  IF_ID_Rt) ) //beq s1,s1,L1
 			begin
@@ -578,7 +575,7 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 				Comp_Mux_2 <= 2'b10;
 			end
 			end
-		else if( Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) 
+		else if( (Mem_WB_Write && Mem_WB_DestReg!=0 && Branch) || (Mem_WB_Write && Mem_WB_DestReg!=0 &&Branch_Not_Equal))
 		begin
 			if ( (Mem_WB_DestReg ==  IF_ID_Rs) && (Mem_WB_DestReg ==  IF_ID_Rt) ) //beq s1,s1,L1
 			begin
@@ -599,7 +596,7 @@ module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch ,IF_ID_Rs , IF_ID_Rt
 				Comp_Mux_1 <= 2'b10;
 			else if( Mem_WB_DestReg ==  IF_ID_Rt)
 				Comp_Mux_2 <= 2'b10;
-			else if(Ex_Mem_Write && Ex_Mem_DestReg!=0 && Branch)
+			else if((Ex_Mem_Write && Ex_Mem_DestReg!=0 && Branch) || (Ex_Mem_Write && Ex_Mem_DestReg!=0 &&Branch_Not_Equal))
 			begin
 				if ( (Ex_Mem_DestReg ==  IF_ID_Rs) && (Ex_Mem_DestReg ==  IF_ID_Rt)) //beq s1,s1,L1
 				begin
@@ -1143,7 +1140,7 @@ wire [31:0] ex_mem_alu_result,ex_mem_lower_mux_out;
 wire ex_mem_reg_write, ex_mem_memtoreg,ex_mem_mem_write,ex_mem_mem_read;
 wire [31:0] Read_Data , mem_wb_mux_output , mem_wb_read_data , mem_wb_alu_reslut ;
 wire [4:0]  mem_wb_dstreg ;
-wire        mem_wb_reg_write , mem_wb_memtoreg ;
+wire        mem_wb_reg_write , mem_wb_memtoreg,flagout, flagin ;
 /*=======================================================================================================================================*/
 
 /**********CLOCK*******/
@@ -1201,11 +1198,11 @@ or   branch_or(branch_or_output,bne_and_output , beq_and_output);
 /****************************************************/
 
 /*******************ID FORWARD UNIT*****************/
-ID_Forwarding_Unit id_forwarding_unit( Comp_Mux_1 , Comp_Mux_2 , Branch , inst_IF_Out[25:21] , inst_IF_Out[20:16] , ex_mem_dstreg , mem_wb_dstreg , ex_mem_reg_write , mem_wb_reg_write );
+ID_Forwarding_Unit id_forwarding_unit( Comp_Mux_1 , Comp_Mux_2 , Branch, Branch_Not_Equal , inst_IF_Out[25:21] , inst_IF_Out[20:16] , ex_mem_dstreg , mem_wb_dstreg , ex_mem_reg_write , mem_wb_reg_write );
 /****************************************************/
 
 /********HAZARD DETECTION UNIT***********/
-HazardDetectionUnit hazard_unit ( id_ex_mem_read ,  regdst_mux_out , inst_IF_Out , hold_pc , hold_if_id_reg , IF_Flush , branch_or_output , hazard_mux_selector );
+HazardDetectionUnit hazard_unit ( id_ex_mem_read ,  regdst_mux_out , inst_IF_Out , hold_pc , hold_if_id_reg , IF_Flush , branch_or_output , hazard_mux_selector, flagout, flagin);
 Hazard_MUX_10_1 hazard_mux( hazard_mux_output , Reg_Write , Mem_to_Reg , Mem_Write , Mem_Read , ALU_Src , Reg_Dstn , ALU_Op , hazard_mux_selector);
 /****************************************/
 
