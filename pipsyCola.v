@@ -43,6 +43,7 @@ module PC( PC_plus , PC , clock , hold_pc );
 	begin
 		if(hold_pc == 0)//if no stall pass the pc+4;	
 		begin
+		$display("pc out: %h \n",PC_plus);
 			PC_plus <= PC;  //if hold =1 do nothing;
 		end
 	end
@@ -50,23 +51,23 @@ endmodule
 module PC_ADDER(PC_Adder_output,PC);
 	output reg[31:0] PC_Adder_output;
 	input [31:0] PC;
-	always @(PC)
+	always @(*)
 	begin
-		PC_Adder_output=PC+1;
+			PC_Adder_output=PC+1;
 	end
 endmodule
-module INS_MEMORY(instruction, clk, pc,  hold_pc);
+module INS_MEMORY(instruction, clk, pc);
 	output reg[31:0] instruction;
 	input  wire[31:0] pc;
-	input  wire clk, hold_pc;
+	input  wire clk;
 	reg[31:0] Imem[0:8191]; // 32KB memory ehich is 8192 register each one is 32bit 
 	initial 
 	begin 
 		$readmemh("ins.txt",Imem);
 	end
-	always @(posedge clk )
+	always @(negedge clk )
 	begin 
-		if(!hold_pc)
+		$display("pc in mem: %h, location in mem:%h \n",pc,Imem[pc]);
 			instruction <= Imem[pc]; 
 	end
 endmodule
@@ -1153,11 +1154,11 @@ CLOCK myClock(Clock);
 
 /*****PC & PC ADDER*****/ 
 PC pc(pcOut, pc_branch_mux_output , Clock , hold_pc );
-PC_ADDER pc_adder( pcIn , pcOut );
+PC_ADDER pc_adder( pcIn , pcOut);
 /***********************/
 
 /******INSTRUCTION MEMORY**********/
-INS_MEMORY ins_memory(instruction, Clock, pcOut, hold_pc);
+INS_MEMORY ins_memory(instruction, Clock, pcOut);
 /***********************************/
 
 /*********BEQ AND BNE MUX***********/
