@@ -1,22 +1,3 @@
-/*
-`include "PC.v"
-`include "pc_adder.v"
-`include "inst_memory.v"
-`include "IF_ID_Reg"
-`include "reg_file.v"
-
-`include "control.v"
-`include "alu_control.v"
-`include "alu.v"
-`include "data_memory.v"
-`include "branch_adder.v"
-`include "sign_extend.v"
-`include "jump_address.v"
-`include "mux.v"
-`include "clock.v"
-
-
-*/
 `timescale 1ns / 1ns
 module CLOCK(Clock);
 	output reg Clock;
@@ -43,7 +24,6 @@ module PC( PC_plus , PC , clock , hold_pc );
 	begin
 		if(hold_pc == 0)//if no stall pass the pc+4;	
 		begin
-		$display("pc out: %h \n",PC_plus);
 			PC_plus <= PC;  //if hold =1 do nothing;
 		end
 	end
@@ -67,7 +47,6 @@ module INS_MEMORY(instruction, clk, pc);
 	end
 	always @(negedge clk )
 	begin 
-		$display("pc in mem: %h, location in mem:%h \n",pc,Imem[pc]);
 			instruction <= Imem[pc]; 
 	end
 endmodule
@@ -76,7 +55,12 @@ module IF_ID_Reg(instrOut , PCplus4Out , instrIn , PCplus4 , clk , hold , IF_Flu
 	input wire [31:0] instrIn , PCplus4 ;
 	input wire        clk , hold , IF_Flush ;
 	output reg [31:0] instrOut , PCplus4Out ;
-
+	integer file;
+	always@(negedge clk)
+	begin
+			file = $fopen("pc.txt");
+		$fwrite(file,"pc: %d , hold: %d , flush: %d \n",PCplus4, hold,IF_Flush);
+	end
 	always @(posedge clk)
 	begin
 		if ( hold ==1'b0 && IF_Flush==1'b1) 
@@ -90,6 +74,8 @@ module IF_ID_Reg(instrOut , PCplus4Out , instrIn , PCplus4 , clk , hold , IF_Flu
       			PCplus4Out <= PCplus4 ;   // da5l el instr ely wa2fa mestnya tetketb 3and el pc out 
       			instrOut   <= instrIn ;   //w eb3t el instr ely kanet feha ely mawgoda fel lines ely metwsla bel ID
       		end
+		
+
     end
 endmodule
 module REG_FILE(Read_Data_1, Read_Data_2, Read_Reg_1, Read_Reg_2, Write_Reg, Write_Data, Reg_Write, Clock );
@@ -155,12 +141,12 @@ module SIGN_EXTEND(Sign_Ext_Output, Ori, Inst_15_0);
 			Sign_Ext_Output <=32'd0;
 	end
 endmodule
-module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC , holdIF_ID , IF_ID_Flush , Branch_And_Output ,muxSelector, flagout, flagin );
+module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC , holdIF_ID , IF_ID_Flush , Branch_And_Output ,muxSelector, flagout, flagin , Jump );
   
 	output reg          holdPC , holdIF_ID , muxSelector , IF_ID_Flush ;
 	input  wire   [4:0] ID_Ex_RegDst ;
  	input  wire  [31:0] IF_ID_Instr ;
-        input  wire         ID_ExMemRead , Branch_And_Output ;
+        input  wire         ID_ExMemRead , Branch_And_Output ,Jump;
  	input wire  flagin;
 	output reg flagout;
 
@@ -178,13 +164,13 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
 		holdPC <=0;       
 		holdIF_ID<=0;
               	muxSelector<=0;
-		if(flagin == 1)
-		begin
+	if(flagin == 1)
+	begin
 			holdPC<=1;
              		holdIF_ID<=1;
               		muxSelector<=1;
 			flagout<=0;
-		end
+	end
 	else
 	begin
 		if ( ( IF_ID_Instr [31:26] != 6'b000100 || IF_ID_Instr [31:26] != 6'b000101  )&& ID_ExMemRead && ( ID_Ex_RegDst == IF_ID_Instr[25:21] || ID_Ex_RegDst == IF_ID_Instr[20:16]) )  // lw + ay 7aga 8ir beq -> stall
@@ -208,8 +194,8 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
 			flagout<=1;
         	end	
         end                 
-		/*========================= Set Flush When Found Branch ================*/
-		if( ( IF_ID_Instr [31:26] == 6'b000100 || IF_ID_Instr [31:26] ==  6'b000101 ) &&  Branch_And_Output ) 
+		/*========================= Set Flush When Found Branch or Jump ================*/
+		if( ( ( IF_ID_Instr [31:26] == 6'b000100 || IF_ID_Instr [31:26] ==  6'b000101 ) &&  Branch_And_Output ) || ( ( IF_ID_Instr [31:26] == 6'b000010 || IF_ID_Instr [31:26] ==  6'b000011 ) &&  Jump ) ) 
 		begin
 			IF_ID_Flush <= 1'b1; //ha2ool lel instruction ely fel IF_ID ely 7aslha fetch w da5lt mesh fakrak yaaad //w nerza3ha ka7ka	
 		end  
@@ -217,7 +203,7 @@ module HazardDetectionUnit( ID_ExMemRead ,  ID_Ex_RegDst , IF_ID_Instr , holdPC 
 		begin
 			IF_ID_Flush <= 1'b0; 
 		end      
-		/*===================================================================*/
+		/*===============================================================================*/
     	end
 endmodule
 module CONTROL(Ori , Reg_Dst , Branch , Branch_Not_Equal, Mem_Read ,Mem_to_Reg , ALU_Op , Mem_Write , ALU_Src , Reg_Write , Jump, Inst_31_26);
@@ -520,6 +506,16 @@ module BR_ADDER(branchAdded, PC_Adder_output, Sign_Ext_Output);
 	always @(PC_Adder_output or Sign_Ext_Output)
 	begin
 		branchAdded <= PC_Adder_output + Sign_Ext_Output;
+	end
+endmodule
+module JUMP_ADDRESS(J_address,Inst_25_0,pc_31_26);
+	input wire[25:0] Inst_25_0;
+	input wire[5:0] pc_31_26;
+	output reg[31:0] J_address;
+
+	always @(Inst_25_0)
+	begin
+		J_address <= {pc_31_26,Inst_25_0};
 	end
 endmodule
 module ID_Forwarding_Unit( Comp_Mux_1 , Comp_Mux_2 , Branch , Branch_Not_Equal, IF_ID_Rs , IF_ID_Rt , Ex_Mem_DestReg , Mem_WB_DestReg , Ex_Mem_Write , Mem_WB_Write );
@@ -1114,12 +1110,12 @@ module Pipeline_MIPS();
 
 /*=============================================================== WIRES =================================================================*/
 wire Clock;
-wire [31:0] instruction , pcIn , pcOut , pc_branch_mux_output , inst_IF_Out , PCplus4_IF_Out ;
+wire [31:0] instruction , pcIn , pcOut , pc_branch_mux_output , inst_IF_Out , PCplus4_IF_Out, jump_mux_output ;
 wire [31:0] Read_Data_1 , Read_Data_2 ;
 wire Zero;
 wire [3:0] ALU_Op;
 wire Ori , Reg_Dstn, Branch, Branch_Not_Equal, Mem_Read, Mem_to_Reg , Mem_Write , ALU_Src , Reg_Write , Jump ;
-wire [31:0] Sign_Ext_Output,branch_adder_output ;
+wire [31:0] Sign_Ext_Output,branch_adder_output,jump_address_output ;
 wire beq_and_output,bne_not_output,bne_and_output,branch_or_output;
 wire [31:0] comp_upper_mux_out , comp_lower_mux_out ;
 wire[1:0] Comp_Mux_1 , Comp_Mux_2 ;
@@ -1147,17 +1143,21 @@ CLOCK myClock(Clock);
 
 /*======================================================== IF STAGE + IF/ID REGISTER ======================================================*/
 
-/*****PC & PC ADDER*****/ 
-PC pc(pcOut, pc_branch_mux_output , Clock , hold_pc );
+/***** PC & PC ADDER *****/ 
+PC pc( pcOut , jump_mux_output , Clock , hold_pc );
 PC_ADDER pc_adder( pcIn , pcOut);
 /***********************/
 
 /******INSTRUCTION MEMORY**********/
-INS_MEMORY ins_memory(instruction, Clock, pcOut);
+INS_MEMORY ins_memory( instruction , Clock, pcOut);
 /***********************************/
 
 /*********BEQ AND BNE MUX***********/
 MUX_32_1 pc_branch_mux( pc_branch_mux_output , pcIn , branch_adder_output, branch_or_output );
+/***********************************/
+
+/*********** JUMP MUX **************/
+MUX_32_1 jump_mux(jump_mux_output,pc_branch_mux_output,jump_address_output, Jump);
 /***********************************/
 
 /******IF/ID REGISTER**************/
@@ -1171,6 +1171,10 @@ IF_ID_Reg IF_ID_reg( inst_IF_Out , PCplus4_IF_Out , instruction , pcIn , Clock ,
 
 /**********REGISTER FILE**********/
 REG_FILE register_file( Read_Data_1 , Read_Data_2 , inst_IF_Out[25:21], inst_IF_Out[20:16], mem_wb_dstreg , mem_wb_mux_output, mem_wb_reg_write , Clock );
+/**********************************/
+
+/**************JUMP****************/
+JUMP_ADDRESS jump_add(jump_address_output,inst_IF_Out[25:0],PCplus4_IF_Out[31:26]);
 /**********************************/
 
 /**********COMPARATOR **********/
@@ -1200,7 +1204,7 @@ ID_Forwarding_Unit id_forwarding_unit( Comp_Mux_1 , Comp_Mux_2 , Branch, Branch_
 /****************************************************/
 
 /********HAZARD DETECTION UNIT***********/
-HazardDetectionUnit hazard_unit ( id_ex_mem_read ,  regdst_mux_out , inst_IF_Out , hold_pc , hold_if_id_reg , IF_Flush , branch_or_output , hazard_mux_selector, flagout, flagin);
+HazardDetectionUnit hazard_unit ( id_ex_mem_read ,  regdst_mux_out , inst_IF_Out , hold_pc , hold_if_id_reg , IF_Flush , branch_or_output , hazard_mux_selector, flagout, flagin ,Jump);
 Hazard_MUX_10_1 hazard_mux( hazard_mux_output , Reg_Write , Mem_to_Reg , Mem_Write , Mem_Read , ALU_Src , Reg_Dstn , ALU_Op , hazard_mux_selector);
 /****************************************/
 
@@ -1231,7 +1235,7 @@ EX_MemReg ex_mem_reg (Clock,id_ex_reg_write, id_ex_memtoreg,id_ex_mem_write, id_
 
 DATA_MEMORY data_memory( Read_Data , ex_mem_mem_write , ex_mem_mem_read , ex_mem_alu_result[12:0] , ex_mem_lower_mux_out , Clock );
 
-Mem_WbReg mem_wb_reg(    ex_mem_reg_write , ex_mem_memtoreg , ex_mem_alu_result ,  Clock , Read_Data  , ex_mem_dstreg ,mem_wb_reg_write , mem_wb_memtoreg , mem_wb_read_data , mem_wb_alu_reslut , mem_wb_dstreg );
+Mem_WbReg mem_wb_reg(ex_mem_reg_write , ex_mem_memtoreg , ex_mem_alu_result ,  Clock , Read_Data  , ex_mem_dstreg ,mem_wb_reg_write , mem_wb_memtoreg , mem_wb_read_data , mem_wb_alu_reslut , mem_wb_dstreg );
 MUX_32_1 mem_wb_mux(mem_wb_mux_output , mem_wb_alu_reslut , mem_wb_read_data , mem_wb_memtoreg );
 
 /*******************************WIRES*******************************/
@@ -1242,21 +1246,15 @@ MUX_32_1 mem_wb_mux(mem_wb_mux_output , mem_wb_alu_reslut , mem_wb_read_data , m
 
 /*
 
-JUMP_ADDRESS jump_add(jump_address_output,instruction[25:0],pcIn[31:26]);
-MUX_32_1 jump_mux(jump_mux_output,pc_branch_mux_output,jump_address_output, Jump);
-
 
 not jr_not(jr_not_output, JR_Signal);
 and jr_and(jr_and_output, Reg_Write, jr_not_output);
 MUX_32_1 jr_mux(jr_mux_output, jump_mux_output, Read_Data_1, JR_Signal);
-
 */
 
 
 initial
 begin
-$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h \n up: %h, low: %h regdst_mux_out: %h , rs: %h , rt:%h	\n branch_or_output: %h, branch_adder_output: %h\n ex_mem_alu_result: %h ,mem_wb_mux_output: %h read_data1: %h , read_data2: %h Zero:%h \n ID_ExMemRead: %h,  ID_Ex_RegDst: %h , IF_ID_Instr: %h , holdPC: %h , holdIF_ID: %h , IF_ID_Flush: %h , Branch_And_Output: %h ***************************************",Clock,pcOut,pcIn,instruction,Comp_Mux_1,Comp_Mux_2,regdst_mux_out,inst_IF_Out[25:21], inst_IF_Out[20:16], branch_or_output, branch_adder_output ,ex_mem_alu_result,mem_wb_mux_output,comp_upper_mux_out , comp_lower_mux_out,Zero,id_ex_mem_read ,  regdst_mux_out , inst_IF_Out , hold_pc , hold_if_id_reg , IF_Flush , branch_or_output );
+$monitor("***************** %b *******************\n pcOut=%h, pcIn:%h, instruction: %h ***************************************",Clock,pcOut,pcIn,instruction);
 end
 endmodule
-
- 
